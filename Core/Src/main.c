@@ -19,11 +19,13 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "can.h"
+#include "tim.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "motor_control.h"
+#include "motor_can.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -139,23 +141,13 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_CAN_Init();
+  MX_TIM2_Init();
+  MX_TIM3_Init();
+  MX_TIM8_Init();
   /* USER CODE BEGIN 2 */
 
-  CAN_Filter_Config();
-
-  if (HAL_CAN_Start(&hcan) != HAL_OK)
-  {
-      Error_Handler();
-  }
-
-  if (HAL_CAN_ActivateNotification(
-          &hcan,
-          CAN_IT_RX_FIFO0_MSG_PENDING |
-          CAN_IT_BUSOFF |
-          CAN_IT_ERROR) != HAL_OK)
-  {
-      Error_Handler();
-  }
+  if (MotorControl_Init() != HAL_OK) Error_Handler();
+  if (MotorCan_Init() != HAL_OK) Error_Handler();
 
   /* USER CODE END 2 */
 
@@ -166,25 +158,9 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-      if (HAL_CAN_GetTxMailboxesFreeLevel(&hcan) > 0U)
-      {
-          if (CAN_Send_Test() == HAL_OK)
-          {
-              can_tx_ok_count++;
-          }
-          else
-          {
-              can_tx_error_count++;
-          }
-      }
-      else
-      {
-          can_tx_error_count++;
-      }
-
-      /* LED0 on the ALIENTEK Elite board is PB5 and active-low. */
-      HAL_GPIO_TogglePin(LED0_GPIO_Port, LED0_Pin);
-      HAL_Delay(1000);
+      MotorControl_Process();
+      MotorCan_Process();
+      HAL_Delay(1);
 
   }
 
@@ -244,6 +220,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan_ptr)
             rx_data) == HAL_OK)
     {
         can_rx_count++;
+        MotorCan_OnRx(&rx_header, rx_data);
 
         if (rx_header.IDE == CAN_ID_STD)
         {
